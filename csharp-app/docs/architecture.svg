@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="720" viewBox="0 0 1120 720" role="img" aria-labelledby="title desc">
+  <title id="title">Conway's Game of Life API Architecture</title>
+  <desc id="desc">Architecture diagram showing client requests flowing through the self-hosted HTTP listener, routing, application service, game engine, validator, and file persistence.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#2f3b52"/>
+    </marker>
+    <style>
+      .bg { fill: #f7f9fc; }
+      .band { fill: #eef3f8; stroke: #c8d3df; stroke-width: 1.5; }
+      .box { fill: #ffffff; stroke: #68778d; stroke-width: 2; rx: 8; }
+      .box-accent { fill: #f7fbff; stroke: #2364aa; stroke-width: 2; rx: 8; }
+      .store { fill: #fffaf0; stroke: #a36516; stroke-width: 2; rx: 8; }
+      .title { font: 700 26px Arial, sans-serif; fill: #172033; }
+      .section { font: 700 16px Arial, sans-serif; fill: #31445f; }
+      .label { font: 700 17px Arial, sans-serif; fill: #172033; }
+      .small { font: 13px Arial, sans-serif; fill: #40516a; }
+      .tiny { font: 12px Arial, sans-serif; fill: #52637a; }
+      .line { stroke: #2f3b52; stroke-width: 2.2; fill: none; marker-end: url(#arrow); }
+      .line-soft { stroke: #607089; stroke-width: 1.8; fill: none; marker-end: url(#arrow); }
+    </style>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1120" height="720"/>
+  <text class="title" x="40" y="48">Conway's Game of Life API Architecture</text>
+  <text class="small" x="40" y="74">Finite-grid board simulation with durable JSON-backed board storage.</text>
+
+  <rect class="band" x="40" y="104" width="1040" height="116" rx="10"/>
+  <text class="section" x="62" y="132">HTTP Surface</text>
+
+  <rect class="box-accent" x="80" y="150" width="190" height="48"/>
+  <text class="label" x="118" y="180">Client / curl</text>
+
+  <rect class="box" x="350" y="140" width="250" height="68"/>
+  <text class="label" x="392" y="166">Program.cs</text>
+  <text class="small" x="382" y="188">TcpListener + JSON routing</text>
+
+  <rect class="box" x="690" y="140" width="280" height="68"/>
+  <text class="label" x="748" y="166">BoardEndpoints</text>
+  <text class="small" x="716" y="188">HTTP status mapping for tests</text>
+
+  <path class="line" d="M270 174 H350"/>
+  <path class="line-soft" d="M600 174 H690"/>
+
+  <rect class="band" x="40" y="254" width="1040" height="188" rx="10"/>
+  <text class="section" x="62" y="282">Application and Domain</text>
+
+  <rect class="box-accent" x="410" y="310" width="280" height="76"/>
+  <text class="label" x="460" y="338">BoardService</text>
+  <text class="small" x="438" y="360">Upload, retrieve, next, N states</text>
+  <text class="small" x="454" y="378">final-state search</text>
+
+  <rect class="box" x="80" y="318" width="240" height="62"/>
+  <text class="label" x="130" y="344">BoardValidator</text>
+  <text class="small" x="106" y="366">Shape, cell, and size limits</text>
+
+  <rect class="box" x="800" y="318" width="240" height="62"/>
+  <text class="label" x="844" y="344">GameOfLifeEngine</text>
+  <text class="small" x="826" y="366">Pure Conway rules engine</text>
+
+  <path class="line-soft" d="M550 254 V310"/>
+  <path class="line-soft" d="M410 348 H320"/>
+  <path class="line-soft" d="M690 348 H800"/>
+
+  <rect class="band" x="40" y="476" width="1040" height="170" rx="10"/>
+  <text class="section" x="62" y="504">Persistence</text>
+
+  <rect class="box" x="270" y="534" width="250" height="68"/>
+  <text class="label" x="318" y="560">IBoardRepository</text>
+  <text class="small" x="306" y="582">Storage boundary</text>
+
+  <rect class="store" x="600" y="518" width="260" height="96"/>
+  <text class="label" x="650" y="546">FileBoardRepository</text>
+  <text class="small" x="630" y="568">One JSON file per board id</text>
+  <text class="small" x="640" y="586">Temp write, then move</text>
+
+  <rect class="store" x="900" y="528" width="140" height="76"/>
+  <text class="label" x="930" y="558">Disk</text>
+  <text class="small" x="920" y="580">data/boards</text>
+
+  <path class="line-soft" d="M550 386 V534 H520"/>
+  <path class="line" d="M520 568 H600"/>
+  <path class="line" d="M860 566 H900"/>
+
+  <rect class="box" x="80" y="668" width="960" height="30"/>
+  <text class="tiny" x="105" y="688">Final state means stable still-life. Oscillators and non-stabilizing boards return errors; repeated states are tracked for early cycle detection.</text>
+</svg>
