@@ -5,6 +5,7 @@ namespace GameOfLife.Api;
 
 public static class BoardEndpoints
 {
+    /// <summary>Uploads and persists a new board, returning the created board id and normalized rows.</summary>
     public static async Task<IResult> Upload(UploadBoardRequest request, BoardService service, CancellationToken cancellationToken)
     {
         try
@@ -18,18 +19,21 @@ public static class BoardEndpoints
         }
     }
 
+    /// <summary>Returns the originally uploaded board for the supplied id.</summary>
     public static async Task<IResult> Get(Guid id, BoardService service, CancellationToken cancellationToken)
     {
         var board = await service.GetAsync(id, cancellationToken);
         return board is null ? Results.NotFound(new ErrorResponse($"Board '{id}' was not found.")) : Results.Ok(board);
     }
 
+    /// <summary>Computes one generation from the originally uploaded board.</summary>
     public static async Task<IResult> GetNext(Guid id, BoardService service, CancellationToken cancellationToken)
     {
         var board = await service.GetNextAsync(id, cancellationToken);
         return board is null ? Results.NotFound(new ErrorResponse($"Board '{id}' was not found.")) : Results.Ok(board);
     }
 
+    /// <summary>Computes a board state a requested number of generations from the original board.</summary>
     public static async Task<IResult> GetStateAfter(Guid id, int steps, BoardService service, CancellationToken cancellationToken)
     {
         if (steps < 0)
@@ -41,6 +45,7 @@ public static class BoardEndpoints
         return board is null ? Results.NotFound(new ErrorResponse($"Board '{id}' was not found.")) : Results.Ok(board);
     }
 
+    /// <summary>Searches for a stable still-life state within the requested attempt limit.</summary>
     public static async Task<IResult> GetFinal(Guid id, int? maxAttempts, BoardService service, CancellationToken cancellationToken)
     {
         if (maxAttempts is < 0)

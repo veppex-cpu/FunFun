@@ -18,6 +18,7 @@ public sealed class FileBoardRepository : IBoardRepository
         Directory.CreateDirectory(_storagePath);
     }
 
+    /// <summary>Loads a persisted board by id, returning null when it is missing or unreadable.</summary>
     public async Task<StoredBoard?> GetAsync(Guid id, CancellationToken cancellationToken = default)
     {
         var path = GetPath(id);
@@ -37,6 +38,7 @@ public sealed class FileBoardRepository : IBoardRepository
         }
     }
 
+    /// <summary>Persists a board to disk using a temp file before moving it into place.</summary>
     public async Task SaveAsync(StoredBoard board, CancellationToken cancellationToken = default)
     {
         var finalPath = GetPath(board.Id);

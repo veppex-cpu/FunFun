@@ -4,6 +4,7 @@ namespace GameOfLife.Api.Services;
 
 public sealed class BoardService(IBoardRepository repository, GameOfLifeEngine engine)
 {
+    /// <summary>Validates, normalizes, assigns an id, and persists a new board.</summary>
     public async Task<BoardDto> UploadAsync(UploadBoardRequest request, CancellationToken cancellationToken = default)
     {
         var normalizedRows = BoardValidator.ValidateAndNormalize(request.Rows);
@@ -14,17 +15,20 @@ public sealed class BoardService(IBoardRepository repository, GameOfLifeEngine e
         return new BoardDto(storedBoard.Id, storedBoard.Rows, Generation: 0);
     }
 
+    /// <summary>Returns the originally uploaded board without computing any generations.</summary>
     public async Task<BoardDto?> GetAsync(Guid id, CancellationToken cancellationToken = default)
     {
         var board = await repository.GetAsync(id, cancellationToken);
         return board is null ? null : new BoardDto(board.Id, board.Rows, Generation: 0);
     }
 
+    /// <summary>Returns the next generation for a stored board without mutating persisted state.</summary>
     public async Task<BoardDto?> GetNextAsync(Guid id, CancellationToken cancellationToken = default)
     {
         return await GetStateAfterAsync(id, steps: 1, cancellationToken);
     }
 
+    /// <summary>Returns the board state after the requested number of generations.</summary>
     public async Task<BoardDto?> GetStateAfterAsync(Guid id, int steps, CancellationToken cancellationToken = default)
     {
         if (steps < 0)
@@ -47,6 +51,7 @@ public sealed class BoardService(IBoardRepository repository, GameOfLifeEngine e
         return new BoardDto(board.Id, rows, steps);
     }
 
+    /// <summary>Finds a stable still-life state or reports a cycle/max-attempt failure.</summary>
     public async Task<FinalStateResult> GetFinalStateAsync(Guid id, int maxAttempts, CancellationToken cancellationToken = default)
     {
         if (maxAttempts < 0)

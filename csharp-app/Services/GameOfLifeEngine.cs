@@ -5,6 +5,7 @@ public sealed class GameOfLifeEngine
     private const char Alive = 'O';
     private const char Dead = '.';
 
+    /// <summary>Computes the next generation using Conway's standard Life rules.</summary>
     public IReadOnlyList<string> Next(IReadOnlyList<string> rows)
     {
         var height = rows.Count;
@@ -32,11 +33,13 @@ public sealed class GameOfLifeEngine
         return next.Select(row => new string(row)).ToArray();
     }
 
+    /// <summary>Compares two board states row by row.</summary>
     public static bool AreEqual(IReadOnlyList<string> left, IReadOnlyList<string> right)
     {
         return left.Count == right.Count && left.SequenceEqual(right);
     }
 
+    /// <summary>Creates a stable string representation used for repeated-state detection.</summary>
     public static string Signature(IReadOnlyList<string> rows) => string.Join('\n', rows);
 
     private static int CountLiveNeighbors(IReadOnlyList<string> rows, int x, int y, int width, int height)

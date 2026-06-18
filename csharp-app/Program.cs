@@ -28,6 +28,7 @@ while (true)
 
 Uri GetUrl(string[] args)
 {
+    // Accept the same --urls shape developers expect from dotnet-hosted services.
     var url = GetArgValue(args, "--urls")
         ?? Environment.GetEnvironmentVariable("ASPNETCORE_URLS")
         ?? "http://127.0.0.1:5010";
@@ -56,6 +57,7 @@ string? GetArgValue(string[] args, string name)
 
 async Task HandleClientAsync(TcpClient client, BoardService service)
 {
+    // One request per TCP connection keeps the custom transport simple.
     await using var stream = client.GetStream();
 
     try
@@ -77,6 +79,7 @@ async Task HandleClientAsync(TcpClient client, BoardService service)
 
 async Task<HttpRequest?> ReadRequestAsync(NetworkStream stream)
 {
+    // Parse only the small HTTP subset this API needs: request line, headers, and Content-Length body.
     var buffer = new byte[8192];
     var received = 0;
     var headerEnd = -1;
@@ -245,6 +248,7 @@ async Task<HttpResponse> RouteAsync(HttpRequest request, BoardService service)
 
 Dictionary<string, string> ParseQuery(string query)
 {
+    // Query parameters are decoded into a case-insensitive lookup for endpoint options.
     return query
         .Split('&', StringSplitOptions.RemoveEmptyEntries)
         .Select(part => part.Split('=', 2))
@@ -257,6 +261,7 @@ Dictionary<string, string> ParseQuery(string query)
 
 async Task WriteJsonResponseAsync(NetworkStream stream, int statusCode, object? body, string? location = null)
 {
+    // Responses are always JSON, including errors, so clients get one predictable shape.
     var payload = JsonSerializer.SerializeToUtf8Bytes(body, jsonOptions);
     var reason = statusCode switch
     {

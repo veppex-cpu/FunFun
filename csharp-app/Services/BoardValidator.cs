@@ -9,6 +9,7 @@ public static class BoardValidator
     private const char Alive = 'O';
     private const char Dead = '.';
 
+    /// <summary>Validates board shape, limits, and cell characters, then normalizes accepted aliases.</summary>
     public static IReadOnlyList<string> ValidateAndNormalize(IReadOnlyList<string>? rows)
     {
         if (rows is null || rows.Count == 0)
