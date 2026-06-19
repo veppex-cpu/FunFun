@@ -71,6 +71,10 @@ async Task HandleClientAsync(TcpClient client, BoardService service)
         var response = await RouteAsync(request, service);
         await WriteJsonResponseAsync(stream, response.StatusCode, response.Body, response.Location);
     }
+    catch (BadHttpRequestException ex)
+    {
+        await WriteJsonResponseAsync(stream, 400, new ErrorResponse(ex.Message));
+    }
     catch (Exception ex)
     {
         await WriteJsonResponseAsync(stream, 500, new ErrorResponse($"Unexpected server error: {ex.Message}"));
@@ -103,7 +107,7 @@ async Task<HttpRequest?> ReadRequestAsync(NetworkStream stream)
 
     if (headerEnd < 0)
     {
-        return null;
+        throw new BadHttpRequestException("HTTP headers are too large or incomplete.");
     }
 
     var headerText = Encoding.ASCII.GetString(buffer, 0, headerEnd);
@@ -124,9 +128,12 @@ async Task<HttpRequest?> ReadRequestAsync(NetworkStream stream)
         }
     }
 
-    var contentLength = headers.TryGetValue("Content-Length", out var contentLengthValue)
-        ? int.Parse(contentLengthValue)
-        : 0;
+    var contentLength = 0;
+    if (headers.TryGetValue("Content-Length", out var contentLengthValue)
+        && (!int.TryParse(contentLengthValue, out contentLength) || contentLength < 0))
+    {
+        throw new BadHttpRequestException("Content-Length must be a non-negative integer.");
+    }
 
     var bodyStart = headerEnd + 4;
     var bodyBytesReceived = received - bodyStart;
@@ -200,11 +207,21 @@ async Task<HttpResponse> RouteAsync(HttpRequest request, BoardService service)
                     : new HttpResponse(200, board);
             }
 
-            if (segments.Length == 4 && segments[2] == "states" && int.TryParse(segments[3], out var steps))
+            if (segments.Length == 4 && segments[2] == "states")
             {
+                if (!int.TryParse(segments[3], out var steps))
+                {
+                    return new HttpResponse(400, new ErrorResponse("Steps must be an integer."));
+                }
+
                 if (steps < 0)
                 {
                     return new HttpResponse(400, new ErrorResponse("Steps must be greater than or equal to 0."));
+                }
+
+                if (steps > BoardService.MaxSteps)
+                {
+                    return new HttpResponse(400, new ErrorResponse($"Steps cannot exceed {BoardService.MaxSteps}."));
                 }
 
                 var board = await service.GetStateAfterAsync(id, steps);
@@ -215,13 +232,21 @@ async Task<HttpResponse> RouteAsync(HttpRequest request, BoardService service)
 
             if (segments.Length == 3 && segments[2] == "final")
             {
-                var maxAttempts = query.TryGetValue("maxAttempts", out var maxAttemptsValue)
-                    ? int.Parse(maxAttemptsValue)
-                    : 100;
+                var maxAttempts = 100;
+                if (query.TryGetValue("maxAttempts", out var maxAttemptsValue)
+                    && !int.TryParse(maxAttemptsValue, out maxAttempts))
+                {
+                    return new HttpResponse(400, new ErrorResponse("maxAttempts must be an integer."));
+                }
 
                 if (maxAttempts < 0)
                 {
                     return new HttpResponse(400, new ErrorResponse("maxAttempts must be greater than or equal to 0."));
+                }
+
+                if (maxAttempts > BoardService.MaxFinalStateAttempts)
+                {
+                    return new HttpResponse(400, new ErrorResponse($"maxAttempts cannot exceed {BoardService.MaxFinalStateAttempts}."));
                 }
 
                 var result = await service.GetFinalStateAsync(id, maxAttempts);

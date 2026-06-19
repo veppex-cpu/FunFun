@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Game of Life Big Board Animation</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6f8fb;
+      --panel: #ffffff;
+      --ink: #172033;
+      --muted: #58657a;
+      --grid: #d7dee8;
+      --alive: #1f7a5c;
+      --accent: #2364aa;
+      --border: #c6d0dc;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: Arial, sans-serif;
+    }
+
+    main {
+      width: min(1120px, calc(100vw - 32px));
+      margin: 24px auto;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: flex-end;
+      margin-bottom: 16px;
+    }
+
+    h1 {
+      margin: 0 0 6px;
+      font-size: 26px;
+      line-height: 1.15;
+    }
+
+    p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    .controls {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    button {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--panel);
+      color: var(--ink);
+      font: 700 14px Arial, sans-serif;
+      padding: 9px 12px;
+      cursor: pointer;
+    }
+
+    button.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #ffffff;
+    }
+
+    .board-wrap {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px;
+      box-shadow: 0 10px 24px rgba(31, 44, 64, 0.08);
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      border: 1px solid var(--grid);
+      background: #ffffff;
+    }
+
+    .stats {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    code {
+      color: var(--ink);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <h1>Big Board Game of Life Animation</h1>
+        <p>Client-side example using a 90 x 90 finite board with several gliders and oscillators.</p>
+      </div>
+      <div class="controls">
+        <button id="toggle" class="primary" type="button">Pause</button>
+        <button id="step" type="button">Step</button>
+        <button id="reset" type="button">Reset</button>
+      </div>
+    </header>
+
+    <section class="board-wrap" aria-label="Game of Life animation">
+      <canvas id="board" width="900" height="900"></canvas>
+      <div class="stats">
+        <span>Generation: <code id="generation">0</code></span>
+        <span>Live cells: <code id="liveCells">0</code></span>
+        <span>Board: <code>90 x 90</code></span>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const size = 90;
+    const cellSize = 10;
+    const canvas = document.getElementById("board");
+    const ctx = canvas.getContext("2d");
+    const generationEl = document.getElementById("generation");
+    const liveCellsEl = document.getElementById("liveCells");
+    const toggleButton = document.getElementById("toggle");
+    const stepButton = document.getElementById("step");
+    const resetButton = document.getElementById("reset");
+
+    let board = createBoard();
+    let generation = 0;
+    let running = true;
+
+    function createBoard() {
+      const grid = Array.from({ length: size }, () => Array(size).fill(false));
+
+      addGlider(grid, 5, 5);
+      addGlider(grid, 18, 12);
+      addGlider(grid, 40, 8);
+      addGlider(grid, 62, 18);
+      addBlinker(grid, 15, 62);
+      addBlinker(grid, 55, 55);
+      addBeacon(grid, 70, 62);
+      addToad(grid, 30, 68);
+
+      return grid;
+    }
+
+    function addGlider(grid, x, y) {
+      setAlive(grid, x + 1, y);
+      setAlive(grid, x + 2, y + 1);
+      setAlive(grid, x, y + 2);
+      setAlive(grid, x + 1, y + 2);
+      setAlive(grid, x + 2, y + 2);
+    }
+
+    function addBlinker(grid, x, y) {
+      setAlive(grid, x, y);
+      setAlive(grid, x + 1, y);
+      setAlive(grid, x + 2, y);
+    }
+
+    function addBeacon(grid, x, y) {
+      setAlive(grid, x, y);
+      setAlive(grid, x + 1, y);
+      setAlive(grid, x, y + 1);
+      setAlive(grid, x + 1, y + 1);
+      setAlive(grid, x + 2, y + 2);
+      setAlive(grid, x + 3, y + 2);
+      setAlive(grid, x + 2, y + 3);
+      setAlive(grid, x + 3, y + 3);
+    }
+
+    function addToad(grid, x, y) {
+      setAlive(grid, x + 1, y);
+      setAlive(grid, x + 2, y);
+      setAlive(grid, x + 3, y);
+      setAlive(grid, x, y + 1);
+      setAlive(grid, x + 1, y + 1);
+      setAlive(grid, x + 2, y + 1);
+    }
+
+    function setAlive(grid, x, y) {
+      if (x >= 0 && x < size && y >= 0 && y < size) {
+        grid[y][x] = true;
+      }
+    }
+
+    function nextGeneration(current) {
+      const next = Array.from({ length: size }, () => Array(size).fill(false));
+
+      for (let y = 0; y < size; y++) {
+        for (let x = 0; x < size; x++) {
+          const aliveNeighbors = countNeighbors(current, x, y);
+          const alive = current[y][x];
+          next[y][x] = alive ? aliveNeighbors === 2 || aliveNeighbors === 3 : aliveNeighbors === 3;
+        }
+      }
+
+      return next;
+    }
+
+    function countNeighbors(grid, x, y) {
+      let count = 0;
+
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          if (dx === 0 && dy === 0) {
+            continue;
+          }
+
+          const nx = x + dx;
+          const ny = y + dy;
+          if (nx >= 0 && nx < size && ny >= 0 && ny < size && grid[ny][nx]) {
+            count++;
+          }
+        }
+      }
+
+      return count;
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.strokeStyle = "#edf1f6";
+      ctx.lineWidth = 1;
+
+      for (let i = 0; i <= size; i++) {
+        const p = i * cellSize;
+        ctx.beginPath();
+        ctx.moveTo(p, 0);
+        ctx.lineTo(p, canvas.height);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(0, p);
+        ctx.lineTo(canvas.width, p);
+        ctx.stroke();
+      }
+
+      let liveCount = 0;
+      ctx.fillStyle = "#1f7a5c";
+      for (let y = 0; y < size; y++) {
+        for (let x = 0; x < size; x++) {
+          if (board[y][x]) {
+            liveCount++;
+            ctx.fillRect(x * cellSize + 1, y * cellSize + 1, cellSize - 2, cellSize - 2);
+          }
+        }
+      }
+
+      generationEl.textContent = String(generation);
+      liveCellsEl.textContent = String(liveCount);
+    }
+
+    function step() {
+      board = nextGeneration(board);
+      generation++;
+      draw();
+    }
+
+    function loop() {
+      if (running) {
+        step();
+      }
+      window.setTimeout(loop, 180);
+    }
+
+    toggleButton.addEventListener("click", () => {
+      running = !running;
+      toggleButton.textContent = running ? "Pause" : "Play";
+    });
+
+    stepButton.addEventListener("click", () => {
+      if (!running) {
+        step();
+      }
+    });
+
+    resetButton.addEventListener("click", () => {
+      board = createBoard();
+      generation = 0;
+      running = true;
+      toggleButton.textContent = "Pause";
+      draw();
+    });
+
+    draw();
+    loop();
+  </script>
+</body>
+</html>

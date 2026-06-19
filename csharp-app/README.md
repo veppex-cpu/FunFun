@@ -57,13 +57,15 @@ The test runner covers:
 - Final-state errors for oscillator, cycle short-circuiting, zero attempts, and max-attempt exceeded.
 - Validation for null rows, empty rows, empty row strings, non-rectangular boards, invalid characters, and alias normalization.
 - Negative `steps` and negative `maxAttempts`.
+- Server-side maximums for `steps` and `maxAttempts`.
 - Exact board-size limits and one-over-limit failures for rows, columns, and total cells.
 - Large valid board one-generation computation.
 - High `steps` support and high `maxAttempts` cycle short-circuiting.
 - Unknown board id `404` behavior for stored board, next state, N states, and final-state endpoints.
+- Real HTTP process tests for upload, malformed numeric query values, and malformed `Content-Length`.
 - Parallel uploads, parallel reads, unique ids, and no leftover temp files.
 
-The executable suite currently has 58 tests.
+The executable suite currently has 63 tests. Some tests start the API process on temporary localhost ports to verify the real HTTP transport.
 
 ## Board Format
 
@@ -84,6 +86,8 @@ Size limits:
 - Maximum rows: `2,000`
 - Maximum columns: `2,000`
 - Maximum total cells: `1,000,000`
+- Maximum `steps`: `10,000`
+- Maximum `maxAttempts`: `10,000`
 
 Why these limits exist:
 
@@ -93,6 +97,7 @@ Why these limits exist:
 - Uploaded boards are read into memory and persisted as JSON, so unbounded board sizes can create avoidable memory, CPU, and disk pressure.
 - Separate row and column limits prevent extreme shapes, such as `1 x 1,000,000`, from creating very large strings or awkward memory behavior.
 - The total-cell limit is the main work budget. A `1,000,000` cell board is large enough for meaningful patterns while keeping one-generation work predictable for this implementation.
+- The `steps` and `maxAttempts` limits prevent a small board from still creating an unbounded CPU request.
 
 Example:
 
@@ -173,6 +178,7 @@ Returns generation `1` computed from the originally uploaded board.
 Returns the board after `steps` generations from the originally uploaded board.
 
 - `steps` must be `>= 0`
+- `steps` must be `<= 10,000`
 - Unknown ids return `404 Not Found`
 
 ### Get Final State
@@ -182,6 +188,9 @@ Returns the board after `steps` generations from the originally uploaded board.
 Final state is interpreted as a stable still-life state: the next generation is identical to the current generation.
 
 If the board enters an oscillator/cycle or does not stabilize within `maxAttempts`, the API returns `422 Unprocessable Entity` with an explanation. Repeated states are tracked so cycles are detected early.
+
+- `maxAttempts` must be `>= 0`
+- `maxAttempts` must be `<= 10,000`
 
 Unknown ids return `404 Not Found`.
 
@@ -228,7 +237,7 @@ Persistence behavior:
 - Board evolution is finite-grid only. Cells outside the uploaded rectangle are treated as dead.
 - Each generation costs `O(rows * columns)`.
 - Final-state detection stores seen board signatures, so memory usage grows with board size and attempted generations.
-- The automated suite exercises service and endpoint-handler behavior. Full socket-level checks for malformed raw HTTP, unsupported methods, and unsupported routes should be run as smoke tests against the running process when changing `Program.cs`.
+- The automated suite includes service, endpoint-handler, and selected real HTTP process tests. Additional raw HTTP cases can still be added when expanding the custom transport.
 
 ## Edge Cases
 
@@ -236,5 +245,11 @@ Persistence behavior:
 - Boards over the row, column, or total-cell limits return validation errors.
 - Empty boards remain empty.
 - Finite board edges are treated as dead outside the uploaded grid.
-- Negative `steps` or `maxAttempts` return `400 Bad Request`.
+- Negative or over-limit `steps`/`maxAttempts` return `400 Bad Request`.
 - Oscillators return `422 Unprocessable Entity` instead of being mistaken for final states.
+
+## Visual Examples
+
+- [Big board browser animation](docs/big-board-animation.html)
+
+Open the HTML file directly in a browser to see a 90 x 90 board evolve with gliders and oscillators. It is a standalone client-side visualization that uses the same finite-grid rules as the API.

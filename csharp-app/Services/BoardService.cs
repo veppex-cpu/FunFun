@@ -4,6 +4,9 @@ namespace GameOfLife.Api.Services;
 
 public sealed class BoardService(IBoardRepository repository, GameOfLifeEngine engine)
 {
+    public const int MaxSteps = 10_000;
+    public const int MaxFinalStateAttempts = 10_000;
+
     /// <summary>Validates, normalizes, assigns an id, and persists a new board.</summary>
     public async Task<BoardDto> UploadAsync(UploadBoardRequest request, CancellationToken cancellationToken = default)
     {
@@ -36,6 +39,11 @@ public sealed class BoardService(IBoardRepository repository, GameOfLifeEngine e
             throw new ArgumentOutOfRangeException(nameof(steps), "Steps must be greater than or equal to 0.");
         }
 
+        if (steps > MaxSteps)
+        {
+            throw new ArgumentOutOfRangeException(nameof(steps), $"Steps cannot exceed {MaxSteps}.");
+        }
+
         var board = await repository.GetAsync(id, cancellationToken);
         if (board is null)
         {
@@ -57,6 +65,11 @@ public sealed class BoardService(IBoardRepository repository, GameOfLifeEngine e
         if (maxAttempts < 0)
         {
             throw new ArgumentOutOfRangeException(nameof(maxAttempts), "maxAttempts must be greater than or equal to 0.");
+        }
+
+        if (maxAttempts > MaxFinalStateAttempts)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxAttempts), $"maxAttempts cannot exceed {MaxFinalStateAttempts}.");
         }
 
         var board = await repository.GetAsync(id, cancellationToken);

@@ -41,6 +41,11 @@ public static class BoardEndpoints
             return Results.BadRequest(new ErrorResponse("Steps must be greater than or equal to 0."));
         }
 
+        if (steps > BoardService.MaxSteps)
+        {
+            return Results.BadRequest(new ErrorResponse($"Steps cannot exceed {BoardService.MaxSteps}."));
+        }
+
         var board = await service.GetStateAfterAsync(id, steps, cancellationToken);
         return board is null ? Results.NotFound(new ErrorResponse($"Board '{id}' was not found.")) : Results.Ok(board);
     }
@@ -51,6 +56,11 @@ public static class BoardEndpoints
         if (maxAttempts is < 0)
         {
             return Results.BadRequest(new ErrorResponse("maxAttempts must be greater than or equal to 0."));
+        }
+
+        if (maxAttempts > BoardService.MaxFinalStateAttempts)
+        {
+            return Results.BadRequest(new ErrorResponse($"maxAttempts cannot exceed {BoardService.MaxFinalStateAttempts}."));
         }
 
         var result = await service.GetFinalStateAsync(id, maxAttempts ?? 100, cancellationToken);

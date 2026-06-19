@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Net;
+using System.Net.Sockets;
 using System.Text.Json;
 using GameOfLife.Api;
 using GameOfLife.Api.Models;
@@ -129,6 +131,8 @@ var tests = new (string Name, Func<Task> Run)[]
     ("Alias cells normalize correctly", AliasCellsNormalizeCorrectly),
     ("Negative steps returns validation error", NegativeStepsReturnsValidationError),
     ("Negative maxAttempts returns validation error", NegativeMaxAttemptsReturnsValidationError),
+    ("Steps over server limit returns validation error", StepsOverServerLimitReturnsValidationError),
+    ("maxAttempts over server limit returns validation error", MaxAttemptsOverServerLimitReturnsValidationError),
     ("Board at max rows is accepted", BoardAtMaxRowsIsAccepted),
     ("Board at max columns is accepted", BoardAtMaxColumnsIsAccepted),
     ("Board at max total cells is accepted", BoardAtMaxTotalCellsIsAccepted),
@@ -143,6 +147,9 @@ var tests = new (string Name, Func<Task> Run)[]
     ("Unknown board id returns 404 for N states", UnknownBoardIdReturns404ForNStates),
     ("Unknown board id returns 404 for final", UnknownBoardIdReturns404ForFinal),
     ("Response value has documented board schema", ResponseValueHasDocumentedBoardSchema),
+    ("Running API accepts upload over real HTTP", RunningApiAcceptsUploadOverRealHttp),
+    ("Running API returns validation error for malformed numeric query", RunningApiReturnsValidationErrorForMalformedNumericQuery),
+    ("Running API returns validation error for malformed Content-Length", RunningApiReturnsValidationErrorForMalformedContentLength),
     ("Parallel uploads return unique ids", ParallelUploadsReturnUniqueIds),
     ("Parallel reads of same board are consistent", ParallelReadsOfSameBoardAreConsistent),
     ("Parallel uploads do not leave temp files", ParallelUploadsDoNotLeaveTempFiles)
@@ -628,6 +635,22 @@ async Task NegativeMaxAttemptsReturnsValidationError()
     Assert.Equal(StatusCodes.Status400BadRequest, await ExecuteAndGetStatusCode(result), "Negative maxAttempts should return HTTP 400.");
 }
 
+async Task StepsOverServerLimitReturnsValidationError()
+{
+    var service = CreateService();
+    var result = await BoardEndpoints.GetStateAfter(Guid.NewGuid(), BoardService.MaxSteps + 1, service, CancellationToken.None);
+
+    Assert.Equal(StatusCodes.Status400BadRequest, await ExecuteAndGetStatusCode(result), "Steps over the server limit should return HTTP 400.");
+}
+
+async Task MaxAttemptsOverServerLimitReturnsValidationError()
+{
+    var service = CreateService();
+    var result = await BoardEndpoints.GetFinal(Guid.NewGuid(), BoardService.MaxFinalStateAttempts + 1, service, CancellationToken.None);
+
+    Assert.Equal(StatusCodes.Status400BadRequest, await ExecuteAndGetStatusCode(result), "maxAttempts over the server limit should return HTTP 400.");
+}
+
 async Task BoardAtMaxRowsIsAccepted()
 {
     var service = CreateService();
@@ -756,6 +779,41 @@ async Task ResponseValueHasDocumentedBoardSchema()
     Assert.Equal(0, value.Generation, "Board response should expose generation.");
 }
 
+async Task RunningApiAcceptsUploadOverRealHttp()
+{
+    await using var api = await RunningApi.StartAsync();
+    using var client = new HttpClient();
+    using var content = new StringContent("{\"rows\":[\"....\",\".OO.\",\".OO.\",\"....\"]}", System.Text.Encoding.UTF8, "application/json");
+
+    var response = await client.PostAsync($"{api.BaseUrl}/boards", content);
+    var body = await response.Content.ReadAsStringAsync();
+    var board = JsonSerializer.Deserialize<BoardDto>(body, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+
+    Assert.Equal(HttpStatusCode.Created, response.StatusCode, "Real HTTP upload should return 201.");
+    Assert.NotNull(board, "Real HTTP upload should return a board response.");
+    Assert.NotEqual(Guid.Empty, board!.Id, "Real HTTP upload should return a board id.");
+    Assert.SequenceEqual(Block, board.Rows, "Real HTTP upload should return normalized rows.");
+}
+
+async Task RunningApiReturnsValidationErrorForMalformedNumericQuery()
+{
+    await using var api = await RunningApi.StartAsync();
+    using var client = new HttpClient();
+
+    var response = await client.GetAsync($"{api.BaseUrl}/boards/{Guid.NewGuid()}/final?maxAttempts=abc");
+
+    Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode, "Malformed maxAttempts should return HTTP 400.");
+}
+
+async Task RunningApiReturnsValidationErrorForMalformedContentLength()
+{
+    await using var api = await RunningApi.StartAsync();
+
+    var response = await SendRawHttpAsync(api.Port, "POST /boards HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: nope\r\n\r\n");
+
+    Assert.Contains("400 Bad Request", response, "Malformed Content-Length should return HTTP 400.");
+}
+
 async Task ParallelUploadsReturnUniqueIds()
 {
     var service = CreateService();
@@ -795,6 +853,18 @@ static BoardService CreateService(string? storagePath = null)
 static string CreateStoragePath()
 {
     return Path.Combine(Path.GetTempPath(), "game-of-life-tests", Guid.NewGuid().ToString("N"));
+}
+
+static async Task<string> SendRawHttpAsync(int port, string request)
+{
+    using var client = new TcpClient();
+    await client.ConnectAsync(IPAddress.Loopback, port);
+    await using var stream = client.GetStream();
+    var bytes = System.Text.Encoding.ASCII.GetBytes(request);
+    await stream.WriteAsync(bytes);
+
+    using var reader = new StreamReader(stream, System.Text.Encoding.ASCII);
+    return await reader.ReadToEndAsync();
 }
 
 static async Task<int> ExecuteAndGetStatusCode(IResult result)
@@ -882,5 +952,102 @@ static class Assert
             throw new InvalidOperationException(
                 $"{message}{Environment.NewLine}Expected:{Environment.NewLine}{string.Join(Environment.NewLine, expected)}{Environment.NewLine}Actual:{Environment.NewLine}{string.Join(Environment.NewLine, actual)}");
         }
+    }
+}
+
+sealed class RunningApi : IAsyncDisposable
+{
+    private readonly Process _process;
+
+    private RunningApi(Process process, int port, string storagePath)
+    {
+        _process = process;
+        Port = port;
+        StoragePath = storagePath;
+        BaseUrl = $"http://127.0.0.1:{port}";
+    }
+
+    public int Port { get; }
+
+    public string StoragePath { get; }
+
+    public string BaseUrl { get; }
+
+    public static async Task<RunningApi> StartAsync()
+    {
+        var port = GetFreePort();
+        var root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../"));
+        var apiDll = Path.Combine(root, "csharp-app", "bin", "Debug", "net10.0", "csharp-app.dll");
+        var storagePath = Path.Combine(Path.GetTempPath(), "game-of-life-http-tests", Guid.NewGuid().ToString("N"));
+
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = "dotnet",
+            Arguments = $"\"{apiDll}\" --urls http://127.0.0.1:{port}",
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
+        };
+        startInfo.Environment["GAME_OF_LIFE_STORAGE"] = storagePath;
+
+        var process = Process.Start(startInfo)
+            ?? throw new InvalidOperationException("Failed to start API process.");
+        var api = new RunningApi(process, port, storagePath);
+
+        await api.WaitUntilReadyAsync();
+        return api;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (!_process.HasExited)
+        {
+            _process.Kill(entireProcessTree: true);
+            await _process.WaitForExitAsync();
+        }
+
+        _process.Dispose();
+    }
+
+    private async Task WaitUntilReadyAsync()
+    {
+        using var client = new HttpClient();
+        var deadline = DateTimeOffset.UtcNow.AddSeconds(10);
+        var url = $"{BaseUrl}/boards/{Guid.Empty}";
+
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            if (_process.HasExited)
+            {
+                var stdout = await _process.StandardOutput.ReadToEndAsync();
+                var stderr = await _process.StandardError.ReadToEndAsync();
+                throw new InvalidOperationException($"API process exited before listening. stdout: {stdout} stderr: {stderr}");
+            }
+
+            try
+            {
+                using var response = await client.GetAsync(url);
+                if (response.StatusCode == HttpStatusCode.NotFound)
+                {
+                    return;
+                }
+            }
+            catch (HttpRequestException)
+            {
+            }
+
+            await Task.Delay(100);
+        }
+
+        throw new TimeoutException("API process did not start listening within 10 seconds.");
+    }
+
+    private static int GetFreePort()
+    {
+        var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+        listener.Stop();
+        return port;
     }
 }
