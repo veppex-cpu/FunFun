@@ -35,3 +35,4 @@ Current verification status:
 - API build succeeds with `0` errors.
 - Test suite has `63` passing tests.
 - Tests include selected real HTTP integration checks that start the API on temporary localhost ports.
+
